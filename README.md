@@ -1,4 +1,4 @@
-# 🧠 InfraMind
+# InfraMind
 
 **Tagline:** *Reasoning-first AI debugger for modern infrastructure*
 
@@ -6,14 +6,14 @@
 [![Gemini 3](https://img.shields.io/badge/Gemini-3-orange.svg)](https://deepmind.google/technologies/gemini/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 🎯 What is InfraMind?
+## What is InfraMind?
 
 InfraMind is an AI-powered infrastructure debugger that uses **Gemini 3's advanced reasoning** to analyze logs, traces, metrics, and configuration files together to generate:
 
-- 🔍 **Root Cause Analysis** - Identify the true source of failures
-- 🔗 **Failure Propagation Chains** - Understand cascading effects
-- 💡 **Actionable Fix Suggestions** - Get concrete remediation steps
-- 📊 **Reasoning Traces** - See how conclusions were reached
+- **Root Cause Analysis** - Identify the true source of failures
+- **Failure Propagation Chains** - Understand cascading effects
+- **Actionable Fix Suggestions** - Get concrete remediation steps
+- **Reasoning Traces** - See how conclusions were reached
 
 > **The Problem:** Engineers can see *what* broke, but not *why* it broke or *what to fix first*.
 > 
@@ -21,7 +21,7 @@ InfraMind is an AI-powered infrastructure debugger that uses **Gemini 3's advanc
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -61,7 +61,7 @@ uvicorn backend.api.main:app --reload --port 8000
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────┐
@@ -84,7 +84,7 @@ uvicorn backend.api.main:app --reload --port 8000
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 infra-mind/
@@ -202,7 +202,7 @@ infra-mind/
 
 ---
 
-## 🤖 Gemini 3 Integration
+## Gemini 3 Integration
 
 InfraMind leverages **Gemini 3's advanced capabilities**:
 
@@ -224,7 +224,7 @@ See [docs/gemini_integration.md](docs/gemini_integration.md) for detailed implem
 
 ---
 
-## 📊 Demo
+## Demo
 
 Check out our 3-minute demo video showing InfraMind analyzing a real microservice outage:
 
@@ -238,7 +238,7 @@ Check out our 3-minute demo video showing InfraMind analyzing a real microservic
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run all tests
@@ -253,7 +253,7 @@ pytest --cov=backend --cov-report=html
 
 ---
 
-## 📝 API Documentation
+## API Documentation
 
 Once the backend is running, visit:
 - **Interactive Docs:** http://localhost:8000/docs
@@ -272,19 +272,19 @@ Once the backend is running, visit:
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 This is a hackathon project, but we welcome contributions! Please read our contributing guidelines.
 
 ---
 
-## 📄 License
+## License
 
 MIT License - see [LICENSE](LICENSE) file for details
 
 ---
 
-## 🏆 Hackathon Submission
+## Hackathon Submission
 
 Built for the **Gemini 3 Global Hackathon** (February 2026)
 
@@ -294,12 +294,11 @@ Built for the **Gemini 3 Global Hackathon** (February 2026)
 
 ---
 
-## 📧 Contact
+## Contact
 
 Questions? Reach out:
-- Email: your.email@example.com
-- Twitter: [@yourhandle](https://twitter.com/yourhandle)
-- GitHub: [@yourusername](https://github.com/yourusername)
+- Email: vaishnaviskamdi@gmail.com
+- GitHub: [@vaish725](https://github.com/vaish725)
 
 ---
 
