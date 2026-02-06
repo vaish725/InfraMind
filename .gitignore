@@ -69,5 +69,9 @@ data/cache/
 prd.md
 hackathon_details.md
 *_STATUS.md
-
-
+TESTING_GUIDE.md
+*_SUMMARY.md
+*_EXPLANATION.md
+TODO.md
+UI_UPGRADE.md
+FIX_GIT_PUSH.md
