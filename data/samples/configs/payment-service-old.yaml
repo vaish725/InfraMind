@@ -1,0 +1,26 @@
+service:
+  name: payment-service
+  port: 8080
+  
+database:
+  host: postgres-primary.internal
+  port: 5432
+  name: payments_db
+  pool:
+    max_connections: 20
+    min_connections: 5
+    connection_timeout: 5000
+    idle_timeout: 300000
+
+workers:
+  count: 10
+  queue_size: 100
+  
+circuit_breaker:
+  enabled: true
+  failure_threshold: 5
+  timeout: 30000
+  
+logging:
+  level: INFO
+  format: json

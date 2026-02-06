@@ -1,0 +1,106 @@
+{
+  "traces": [
+    {
+      "trace_id": "trace-001",
+      "span_id": "span-001",
+      "service": "api-gateway",
+      "operation": "POST /api/payments",
+      "start_time": "2025-01-26T14:51:15.567Z",
+      "duration": 234,
+      "status": "OK",
+      "tags": {"http.method": "POST", "http.status_code": "200"}
+    },
+    {
+      "trace_id": "trace-001",
+      "span_id": "span-002",
+      "parent_span_id": "span-001",
+      "service": "order-service",
+      "operation": "initiate_payment",
+      "start_time": "2025-01-26T14:51:15.590Z",
+      "duration": 200,
+      "status": "OK",
+      "tags": {"order_id": "ORD-12345"}
+    },
+    {
+      "trace_id": "trace-001",
+      "span_id": "span-003",
+      "parent_span_id": "span-002",
+      "service": "payment-service",
+      "operation": "process_payment",
+      "start_time": "2025-01-26T14:51:15.610Z",
+      "duration": 179,
+      "status": "OK",
+      "tags": {"amount": "99.99", "transaction_id": "TXN-98765"}
+    },
+    {
+      "trace_id": "trace-002",
+      "span_id": "span-004",
+      "service": "api-gateway",
+      "operation": "POST /api/payments",
+      "start_time": "2025-01-26T14:52:50.901Z",
+      "duration": 5345,
+      "status": "ERROR",
+      "error": "Internal Server Error",
+      "tags": {"http.method": "POST", "http.status_code": "500"}
+    },
+    {
+      "trace_id": "trace-002",
+      "span_id": "span-005",
+      "parent_span_id": "span-004",
+      "service": "order-service",
+      "operation": "initiate_payment",
+      "start_time": "2025-01-26T14:52:50.920Z",
+      "duration": 5315,
+      "status": "ERROR",
+      "error": "Payment service call failed",
+      "tags": {"order_id": "ORD-12347"}
+    },
+    {
+      "trace_id": "trace-002",
+      "span_id": "span-006",
+      "parent_span_id": "span-005",
+      "service": "payment-service",
+      "operation": "process_payment",
+      "start_time": "2025-01-26T14:52:50.940Z",
+      "duration": 5290,
+      "status": "ERROR",
+      "error": "DatabaseConnectionTimeout: Timeout waiting for connection from pool",
+      "tags": {"amount": "149.99", "db.pool.available": "0", "db.pool.waiting": "45"}
+    },
+    {
+      "trace_id": "trace-003",
+      "span_id": "span-007",
+      "service": "api-gateway",
+      "operation": "POST /api/payments",
+      "start_time": "2025-01-26T14:53:15.456Z",
+      "duration": 5012,
+      "status": "TIMEOUT",
+      "error": "Gateway timeout",
+      "tags": {"http.method": "POST", "http.status_code": "504"}
+    },
+    {
+      "trace_id": "trace-003",
+      "span_id": "span-008",
+      "parent_span_id": "span-007",
+      "service": "order-service",
+      "operation": "initiate_payment",
+      "start_time": "2025-01-26T14:53:15.476Z",
+      "duration": 4985,
+      "status": "TIMEOUT",
+      "error": "Payment service timeout",
+      "tags": {"order_id": "ORD-12348"}
+    },
+    {
+      "trace_id": "trace-003",
+      "span_id": "span-009",
+      "parent_span_id": "span-008",
+      "service": "payment-service",
+      "operation": "process_payment",
+      "start_time": "2025-01-26T14:53:15.496Z",
+      "duration": 4960,
+      "status": "ERROR",
+      "error": "CircuitBreakerOpen: Database circuit breaker is open",
+      "tags": {"amount": "199.99", "circuit_breaker.state": "OPEN"}
+    }
+  ]
+}
