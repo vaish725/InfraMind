@@ -28,9 +28,10 @@ class CausalLink(BaseModel):
 class Evidence(BaseModel):
     """Evidence supporting a conclusion."""
     source: str  # "log", "metric", "trace", "config"
-    description: str
+    description: Optional[str] = ""  # Make optional with default empty string
     reference: Optional[str] = None  # Log line, metric name, etc.
     timestamp: Optional[datetime] = None
+    relevance_score: Optional[float] = None  # Add relevance_score field if used by Gemini
 
 
 class FixSuggestion(BaseModel):
@@ -47,7 +48,7 @@ class ReasoningStep(BaseModel):
     step_number: int
     description: str
     evidence: List[Evidence] = Field(default_factory=list)
-    conclusion: str
+    conclusion: Optional[str] = ""  # Make optional with default empty string
 
 
 class RootCauseAnalysis(BaseModel):

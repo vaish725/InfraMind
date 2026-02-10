@@ -62,16 +62,8 @@ data/cache/
 *.db
 *.sqlite
 
-# Streamlit
-.streamlit/secrets.toml
-
 # miscellaneous md files
 prd.md
 hackathon_details.md
-*_STATUS.md
-PHASE5_SUMMARY.md
-PIPELINE_EXPLANATION.md
-TESTING_GUIDE.md
-TESTING_RESULTS.md
-TODO.md
-UI_UPGRADE.md
+PROJECT_STORY.md
+

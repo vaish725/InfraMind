@@ -13,7 +13,6 @@ from backend.models.schemas import (
     IncidentStatus
 )
 from backend.models import DeploymentEvent
-from backend.models.rca import ConfidenceLevel
 from backend.reasoning import ReasoningEngine
 from backend.ingestion import DataUnifier
 from backend.core.exceptions import GeminiAPIError, ParsingError, ValidationError
@@ -428,19 +427,19 @@ def _generate_demo_rca(context, incident_id: str):
     if is_payment_incident and (has_connection_errors or has_oom_errors or error_rate > 50):
         return RootCauseAnalysis(
             incident_id=incident_id,
-            summary="Payment system failure caused by database connection pool exhaustion from resource leak in newly deployed FraudDetectionService",
-            root_cause="Database connection pool exhaustion caused by resource leak in FraudDetectionService v3.5.0. The service fails to close database connections, ResultSets, and PreparedStatements in finally blocks, leading to connection starvation across all payment processing pods.",
-            overall_confidence=ConfidenceLevel.HIGH,
+            root_cause_description="Database connection pool exhaustion caused by resource leak in FraudDetectionService v3.5.0. The service fails to close database connections, ResultSets, and PreparedStatements in finally blocks, leading to connection starvation across all payment processing pods.",
+            overall_confidence=0.95,
             reasoning_steps=[
                 ReasoningStep(
                     step_number=1,
                     description="Analyzed payment-api.log and identified repeated 'Connection pool exhausted' errors starting at 14:30:45",
-                    conclusion="All 500 database connections were active with none idle, indicating a connection leak rather than legitimate high load",
+                    finding="All 500 database connections were active with none idle, indicating a connection leak rather than legitimate high load",
+                    confidence=0.98,
                     evidence=[
                         Evidence(
                             source="payment-api.log",
-                            description="HikariPool-1 - Connection is not available, request timed out after 30000ms. [active=500, idle=0, waiting=245]",
-                            timestamp=demo_timestamp,
+                            timestamp=context.start_time,
+                            content="HikariPool-1 - Connection is not available, request timed out after 30000ms. [active=500, idle=0, waiting=245]",
                             relevance_score=0.95
                         )
                     ]
@@ -448,12 +447,13 @@ def _generate_demo_rca(context, incident_id: str):
                 ReasoningStep(
                     step_number=2,
                     description="Examined payment-metrics.csv showing error rate progression from 0.2% to 100% over 8 minutes",
-                    conclusion="Exponential error growth pattern consistent with resource exhaustion, not code bug or infrastructure failure",
+                    finding="Exponential error growth pattern consistent with resource exhaustion, not code bug or infrastructure failure",
+                    confidence=0.92,
                     evidence=[
                         Evidence(
                             source="payment-metrics.csv",
-                            description="Error rate: 0.2% → 15.3% → 67.8% → 100.0% between 14:30-14:38",
-                            timestamp=demo_timestamp,
+                            timestamp=context.start_time,
+                            content="Error rate: 0.2% → 15.3% → 67.8% → 100.0% between 14:30-14:38",
                             relevance_score=0.90
                         )
                     ]
@@ -461,12 +461,13 @@ def _generate_demo_rca(context, incident_id: str):
                 ReasoningStep(
                     step_number=3,
                     description="Analyzed payment-traces.json distributed traces identifying FraudDetectionService as leak source",
-                    conclusion="FraudDetectionService.checkFraudPattern() method opens database connections but has no connection.close() in finally block",
+                    finding="FraudDetectionService.checkFraudPattern() method opens database connections but has no connection.close() in finally block",
+                    confidence=0.94,
                     evidence=[
                         Evidence(
                             source="payment-traces.json",
-                            description="FraudDetectionService span shows db.connection.acquire but missing db.connection.release events",
-                            timestamp=demo_timestamp,
+                            timestamp=context.start_time,
+                            content="FraudDetectionService span shows db.connection.acquire but missing db.connection.release events",
                             relevance_score=0.93
                         )
                     ]
@@ -474,12 +475,13 @@ def _generate_demo_rca(context, incident_id: str):
                 ReasoningStep(
                     step_number=4,
                     description="Correlated with application-config.json showing v3.5.0 deployment at 14:15:00",
-                    conclusion="FraudDetectionService was newly added in v3.5.0, 15 minutes before incident started. Previous stable version v3.4.9 had no connection issues",
+                    finding="FraudDetectionService was newly added in v3.5.0, 15 minutes before incident started. Previous stable version v3.4.9 had no connection issues",
+                    confidence=0.96,
                     evidence=[
                         Evidence(
                             source="application-config.json",
-                            description="v3.5.0 changes: Added FraudDetectionService with real-time pattern matching. Bug: Database connections not closed in finally block",
-                            timestamp=demo_timestamp,
+                            timestamp=context.start_time,
+                            content="v3.5.0 changes: Added FraudDetectionService with real-time pattern matching. Bug: Database connections not closed in finally block",
                             relevance_score=0.97
                         )
                     ]
@@ -487,36 +489,32 @@ def _generate_demo_rca(context, incident_id: str):
             ],
             causal_chain=[
                 CausalLink(
-                    event="v3.5.0 deployment with FraudDetectionService",
-                    timestamp=demo_timestamp,
-                    service="payment-api",
-                    is_root_cause=True,
-                    is_symptom=False,
-                    confidence=ConfidenceLevel.HIGH
+                    from_event="v3.5.0 deployment with FraudDetectionService",
+                    to_event="Database connections leaked on every fraud check call",
+                    relationship_type="causes",
+                    confidence=0.96,
+                    evidence=["application-config.json shows v3.5.0 deployed at 14:15:00", "payment-api.log shows first connection errors at 14:30:45"]
                 ),
                 CausalLink(
-                    event="Database connections leaked on every fraud check call",
-                    timestamp=demo_timestamp,
-                    service="FraudDetectionService",
-                    is_root_cause=True,
-                    is_symptom=False,
-                    confidence=ConfidenceLevel.HIGH
+                    from_event="Database connections leaked on every fraud check call",
+                    to_event="Connection pool exhaustion (500/500 active)",
+                    relationship_type="leads_to",
+                    confidence=0.98,
+                    evidence=["payment-metrics.csv shows 500/500 connections active", "payment-traces.json confirms no connection.release() calls"]
                 ),
                 CausalLink(
-                    event="Connection pool exhaustion (500/500 active)",
-                    timestamp=demo_timestamp,
-                    service="payment-db",
-                    is_root_cause=False,
-                    is_symptom=True,
-                    confidence=ConfidenceLevel.HIGH
+                    from_event="Connection pool exhaustion (500/500 active)",
+                    to_event="All payment requests fail with timeout errors",
+                    relationship_type="causes",
+                    confidence=0.99,
+                    evidence=["payment-api.log shows 'Connection timed out after 30000ms'", "payment-metrics.csv shows 100% error rate"]
                 ),
                 CausalLink(
-                    event="All payment requests fail with timeout errors",
-                    timestamp=demo_timestamp,
-                    service="payment-api",
-                    is_root_cause=False,
-                    is_symptom=True,
-                    confidence=ConfidenceLevel.HIGH
+                    from_event="Connection pool exhaustion",
+                    to_event="Memory pressure and OOMKilled events",
+                    relationship_type="contributes_to",
+                    confidence=0.85,
+                    evidence=["payment-api.log shows OOMKilled events", "Each leaked connection consumes ~2MB heap memory"]
                 )
             ],
             contributing_factors=[
@@ -525,7 +523,7 @@ def _generate_demo_rca(context, incident_id: str):
                 "Connection pool monitoring alerts were disabled during deployment window",
                 "No load testing performed on FraudDetectionService before production deployment"
             ],
-            services_affected=["payment-api", "FraudDetectionService", "payment-db-prod"],
+            affected_services=["payment-api", "FraudDetectionService", "payment-db-prod"],
             symptoms=[
                 "100% payment transaction failure rate",
                 "Connection pool exhaustion errors",
@@ -535,47 +533,64 @@ def _generate_demo_rca(context, incident_id: str):
             ],
             fix_suggestions=[
                 FixSuggestion(
-                    priority="immediate",
-                    category="infrastructure",
-                    description="IMMEDIATE: Rollback payment-api to v3.4.9",
-                    implementation="kubectl rollout undo deployment/payment-api -n payment-system; Verify pods restart with v3.4.9 image; Confirm error rate drops to <1% within 2 minutes; Monitor connection pool: active connections should drop below 200",
-                    impact="Restores payment processing to 100% success rate within 5 minutes"
+                    priority=1,
+                    action="IMMEDIATE: Rollback payment-api to v3.4.9",
+                    rationale="Previous stable version has no connection leak issues. Rollback takes 3 minutes with zero data migration.",
+                    estimated_impact="Restores payment processing to 100% success rate within 5 minutes",
+                    estimated_effort="3 minutes",
+                    validation_steps=[
+                        "Execute: kubectl rollout undo deployment/payment-api -n payment-system",
+                        "Verify pods restart with v3.4.9 image",
+                        "Confirm error rate drops to <1% within 2 minutes",
+                        "Monitor connection pool: active connections should drop below 200"
+                    ]
                 ),
                 FixSuggestion(
-                    priority="short-term",
-                    category="code",
-                    description="SHORT-TERM: Fix FraudDetectionService connection leak in v3.5.1",
-                    implementation="Wrap all database calls in try-finally blocks; Add connection.close(), resultSet.close(), statement.close() in finally blocks; Load test with 10,000 RPS for 30 minutes; Verify connections are released: active connections remain <300 under load",
-                    impact="Prevents recurrence when v3.5.1 is deployed"
+                    priority=2,
+                    action="SHORT-TERM: Fix FraudDetectionService connection leak in v3.5.1",
+                    rationale="Add proper try-finally blocks to close connections, ResultSets, and PreparedStatements",
+                    estimated_impact="Prevents recurrence when v3.5.1 is deployed",
+                    estimated_effort="2-4 hours development + testing",
+                    validation_steps=[
+                        "Wrap all database calls in try-finally blocks",
+                        "Add connection.close(), resultSet.close(), statement.close() in finally blocks",
+                        "Load test with 10,000 RPS for 30 minutes",
+                        "Verify connections are released: active connections remain <300 under load"
+                    ]
                 ),
                 FixSuggestion(
-                    priority="long-term",
-                    category="observability",
-                    description="LONG-TERM: Enable connection leak detection and monitoring",
-                    implementation="Set connection leak detection threshold to 10s (lower than 30s query timeout); Re-enable connection pool monitoring alerts; Add Grafana dashboard for connection pool metrics; Implement automated rollback triggers on connection pool >90%",
-                    impact="Early detection of future connection leaks"
+                    priority=3,
+                    action="LONG-TERM: Enable connection leak detection and monitoring",
+                    rationale="Prevent similar issues by detecting leaks before production impact",
+                    estimated_impact="Early detection of future connection leaks",
+                    estimated_effort="1 day",
+                    validation_steps=[
+                        "Set connection leak detection threshold to 10s (lower than 30s query timeout)",
+                        "Re-enable connection pool monitoring alerts",
+                        "Add Grafana dashboard for connection pool metrics",
+                        "Implement automated rollback triggers on connection pool >90%"
+                    ]
                 )
             ],
-            estimated_impact="$2.5M/hour revenue loss, 50,000+ customers affected",
-            time_to_detection="5 minutes 28 seconds"
+            generated_at=datetime.now()
         )
     
     # Generic fallback demo for other incidents
     return RootCauseAnalysis(
         incident_id=incident_id,
-        summary="Database query performance degradation due to missing index",
-        root_cause="Database query performance degradation due to missing index on frequently queried column. Queries scanning full table resulted in lock contention and timeout errors.",
-        overall_confidence=ConfidenceLevel.MEDIUM,
+        root_cause_description="Database query performance degradation due to missing index on frequently queried column. Queries scanning full table resulted in lock contention and timeout errors.",
+        overall_confidence=0.85,
         reasoning_steps=[
             ReasoningStep(
                 step_number=1,
                 description="Analyzed database logs and identified slow query patterns",
-                conclusion="Multiple queries taking >30 seconds on 'transactions' table, full table scans detected",
+                finding="Multiple queries taking >30 seconds on 'transactions' table, full table scans detected",
+                confidence=0.90,
                 evidence=[
                     Evidence(
                         source="database.log",
-                        description="Query execution time: 45.3s, rows scanned: 12M, rows returned: 150",
-                        timestamp=demo_timestamp,
+                        timestamp=context.start_time,
+                        content="Query execution time: 45.3s, rows scanned: 12M, rows returned: 150",
                         relevance_score=0.88
                     )
                 ]
@@ -583,12 +598,13 @@ def _generate_demo_rca(context, incident_id: str):
             ReasoningStep(
                 step_number=2,
                 description="Examined recent schema changes and deployment history",
-                conclusion="New query pattern introduced in recent deployment without corresponding index creation",
+                finding="New query pattern introduced in recent deployment without corresponding index creation",
+                confidence=0.82,
                 evidence=[
                     Evidence(
                         source="deployment-history",
-                        description="v2.5.0 added filtering by 'merchant_id' column without index",
-                        timestamp=demo_timestamp,
+                        timestamp=context.start_time,
+                        content="v2.5.0 added filtering by 'merchant_id' column without index",
                         relevance_score=0.85
                     )
                 ]
@@ -596,28 +612,18 @@ def _generate_demo_rca(context, incident_id: str):
         ],
         causal_chain=[
             CausalLink(
-                event="Missing index on merchant_id column",
-                timestamp=demo_timestamp,
-                service="database",
-                is_root_cause=True,
-                is_symptom=False,
-                confidence=ConfidenceLevel.MEDIUM
+                from_event="Missing index on merchant_id column",
+                to_event="Full table scans on queries",
+                relationship_type="causes",
+                confidence=0.90,
+                evidence=["Database logs show seq_scan operations", "Query analyzer indicates missing index"]
             ),
             CausalLink(
-                event="Full table scans on queries",
-                timestamp=demo_timestamp,
-                service="database",
-                is_root_cause=False,
-                is_symptom=True,
-                confidence=ConfidenceLevel.MEDIUM
-            ),
-            CausalLink(
-                event="Lock contention and timeouts",
-                timestamp=demo_timestamp,
-                service="api-service",
-                is_root_cause=False,
-                is_symptom=True,
-                confidence=ConfidenceLevel.MEDIUM
+                from_event="Full table scans",
+                to_event="Lock contention and timeouts",
+                relationship_type="leads_to",
+                confidence=0.85,
+                evidence=["Lock wait timeout errors in logs", "Connection pool saturation"]
             )
         ],
         contributing_factors=[
@@ -625,7 +631,7 @@ def _generate_demo_rca(context, incident_id: str):
             "Missing index on high-cardinality column",
             "Insufficient monitoring on query performance metrics"
         ],
-        services_affected=["database", "api-service"],
+        affected_services=["database", "api-service"],
         symptoms=[
             "Increased query latency",
             "Timeout errors",
@@ -633,20 +639,29 @@ def _generate_demo_rca(context, incident_id: str):
         ],
         fix_suggestions=[
             FixSuggestion(
-                priority="immediate",
-                category="infrastructure",
-                description="Create index on merchant_id column",
-                implementation="CREATE INDEX idx_merchant_id ON transactions(merchant_id); Verify index is used with EXPLAIN ANALYZE; Monitor query performance for 15 minutes",
-                impact="Reduce query time from 45s to <100ms"
+                priority=1,
+                action="Create index on merchant_id column",
+                rationale="Eliminate full table scans and improve query performance",
+                estimated_impact="Reduce query time from 45s to <100ms",
+                estimated_effort="5-10 minutes",
+                validation_steps=[
+                    "CREATE INDEX idx_merchant_id ON transactions(merchant_id)",
+                    "Verify index is used with EXPLAIN ANALYZE",
+                    "Monitor query performance for 15 minutes"
+                ]
             ),
             FixSuggestion(
-                priority="short-term",
-                category="observability",
-                description="Add query performance monitoring alerts",
-                implementation="Set up alerts for queries >5s; Add slow query dashboard; Enable query plan analysis",
-                impact="Early detection of performance regressions"
+                priority=2,
+                action="Add query performance monitoring alerts",
+                rationale="Detect slow queries before they cause incidents",
+                estimated_impact="Early detection of performance regressions",
+                estimated_effort="2-3 hours",
+                validation_steps=[
+                    "Set up alerts for queries >5s",
+                    "Add slow query dashboard",
+                    "Enable query plan analysis"
+                ]
             )
         ],
-        estimated_impact="Service degradation affecting all users",
-        time_to_detection="Unknown"
+        generated_at=datetime.now()
     )

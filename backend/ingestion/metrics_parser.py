@@ -3,6 +3,8 @@ Metrics parser for InfraMind.
 Parses time-series metrics data and detects anomalies.
 """
 import json
+import csv
+import io
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dateutil import parser as date_parser
@@ -29,26 +31,42 @@ class MetricsParser:
     def parse_file(self, file_content: str) -> List[MetricDataPoint]:
         """
         Parse metrics file into MetricDataPoint objects.
+        Supports both JSON and CSV formats.
         
         Args:
-            file_content: Raw content of metrics file (JSON format)
+            file_content: Raw content of metrics file (JSON or CSV format)
             
         Returns:
             List of MetricDataPoint objects
         """
         try:
-            data = json.loads(file_content)
+            # Check for empty content
+            if not file_content or not file_content.strip():
+                raise ParsingError("Metrics file is empty or contains only whitespace")
             
-            # Support various JSON structures
-            if isinstance(data, list):
-                return self._parse_list_format(data)
-            elif isinstance(data, dict):
-                return self._parse_dict_format(data)
+            # Try to detect format - if it starts with { or [, it's likely JSON
+            stripped_content = file_content.strip()
+            if stripped_content.startswith('{') or stripped_content.startswith('['):
+                # Parse as JSON
+                data = json.loads(file_content)
+                
+                # Support various JSON structures
+                if isinstance(data, list):
+                    return self._parse_list_format(data)
+                elif isinstance(data, dict):
+                    return self._parse_dict_format(data)
+                else:
+                    raise ParsingError("Unsupported metrics format")
             else:
-                raise ParsingError("Unsupported metrics format")
+                # Try parsing as CSV
+                return self._parse_csv_format(file_content)
                 
         except json.JSONDecodeError as e:
-            raise ParsingError(f"Invalid JSON in metrics file: {str(e)}")
+            # If JSON parsing fails, try CSV
+            try:
+                return self._parse_csv_format(file_content)
+            except Exception as csv_e:
+                raise ParsingError(f"Invalid JSON in metrics file: {str(e)}. Also failed as CSV: {str(csv_e)}")
         except Exception as e:
             logger.error(f"Error parsing metrics: {str(e)}")
             raise ParsingError(f"Failed to parse metrics: {str(e)}")
@@ -98,12 +116,24 @@ class MetricsParser:
             "memory": [...]
           }
         }
+        OR
+        {
+          "metrics": [
+            {"timestamp": "...", "metric": "cpu", "value": 75.5},
+            ...
+          ]
+        }
         """
         metrics = []
         
         # Try to find metrics data
         metrics_data = data.get('metrics') or data.get('data') or data
         
+        # If metrics_data is a list, parse it as list format
+        if isinstance(metrics_data, list):
+            return self._parse_list_format(metrics_data)
+        
+        # Otherwise parse as dict format
         for metric_name, values in metrics_data.items():
             if not isinstance(values, list):
                 # Single value
@@ -223,6 +253,59 @@ class MetricsParser:
             ))
         
         return summaries
+    
+    def _parse_csv_format(self, file_content: str) -> List[MetricDataPoint]:
+        """
+        Parse metrics in CSV format.
+        Expected columns: timestamp, metric/name, value, [unit], [tags/service/etc]
+        """
+        metrics = []
+        
+        try:
+            # Use csv.DictReader to parse CSV
+            csv_file = io.StringIO(file_content)
+            reader = csv.DictReader(csv_file)
+            
+            for row in reader:
+                try:
+                    # Get timestamp
+                    timestamp_str = row.get('timestamp') or row.get('time') or datetime.now().isoformat()
+                    timestamp = self._parse_timestamp(timestamp_str)
+                    
+                    # Get metric name
+                    metric_name = row.get('metric') or row.get('name') or row.get('metric_name')
+                    if not metric_name:
+                        continue
+                    
+                    # Get value
+                    value_str = row.get('value', '0')
+                    value = float(value_str)
+                    
+                    # Get optional fields
+                    unit = row.get('unit')
+                    
+                    # Collect remaining columns as tags
+                    tags = {k: v for k, v in row.items() 
+                           if k not in ['timestamp', 'time', 'metric', 'name', 'metric_name', 'value', 'unit']}
+                    
+                    metrics.append(MetricDataPoint(
+                        timestamp=timestamp,
+                        metric_name=metric_name,
+                        value=value,
+                        unit=unit,
+                        tags=tags if tags else None
+                    ))
+                except Exception as e:
+                    logger.warning(f"Failed to parse CSV row: {e}")
+                    continue
+                    
+        except Exception as e:
+            raise ParsingError(f"Failed to parse CSV format: {str(e)}")
+        
+        if not metrics:
+            raise ParsingError("No valid metrics found in CSV file")
+            
+        return metrics
     
     def _parse_timestamp(self, timestamp_str: str) -> datetime:
         """Parse timestamp string to datetime object."""

@@ -25,10 +25,6 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_workers: int = 1
     
-    # Streamlit Configuration
-    streamlit_server_port: int = 8501
-    streamlit_server_address: str = "localhost"
-    
     # Processing Limits
     max_file_size_mb: int = 10
     max_context_length: int = 100000

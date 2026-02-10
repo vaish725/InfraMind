@@ -1,0 +1,206 @@
+{
+  "traces": [
+    {
+      "trace_id": "trace-89234-payment-txn",
+      "service": "payment-api",
+      "operation": "processPayment",
+      "start_time": "2026-02-09T14:23:17.234Z",
+      "duration_ms": 30156,
+      "status": "ERROR",
+      "error_message": "Connection pool exhausted",
+      "spans": [
+        {
+          "span_id": "span-1",
+          "operation": "validatePaymentRequest",
+          "duration_ms": 12,
+          "status": "OK"
+        },
+        {
+          "span_id": "span-2",
+          "operation": "checkFraudDetection",
+          "duration_ms": 30089,
+          "status": "TIMEOUT",
+          "error_message": "Database query timeout after 30000ms",
+          "tags": {
+            "db.statement": "SELECT * FROM fraud_patterns WHERE user_id=? AND risk_score > ?",
+            "db.connection_pool.active": 500,
+            "db.connection_pool.idle": 0,
+            "db.connection_pool.waiting": 234
+          }
+        },
+        {
+          "span_id": "span-3",
+          "operation": "processPaymentGateway",
+          "duration_ms": 0,
+          "status": "NOT_EXECUTED",
+          "error_message": "Skipped due to fraud detection timeout"
+        }
+      ],
+      "metadata": {
+        "user_id": "USR-45623",
+        "transaction_amount": 299.99,
+        "payment_method": "credit_card",
+        "deployment_version": "v3.5.0"
+      }
+    },
+    {
+      "trace_id": "trace-89235-payment-txn",
+      "service": "payment-api",
+      "operation": "processPayment",
+      "start_time": "2026-02-09T14:23:18.123Z",
+      "duration_ms": 30234,
+      "status": "ERROR",
+      "error_message": "Could not get connection from pool",
+      "spans": [
+        {
+          "span_id": "span-1",
+          "operation": "validatePaymentRequest",
+          "duration_ms": 15,
+          "status": "OK"
+        },
+        {
+          "span_id": "span-2",
+          "operation": "checkFraudDetection",
+          "duration_ms": 30180,
+          "status": "ERROR",
+          "error_message": "Could not get connection from pool within 30000ms",
+          "tags": {
+            "db.connection_wait_time_ms": 30000,
+            "db.connection_pool.size": 500,
+            "db.connection_pool.active": 500,
+            "db.connection_pool.idle": 0,
+            "db.connection_pool.leaked": 47
+          }
+        }
+      ],
+      "metadata": {
+        "user_id": "USR-78934",
+        "transaction_amount": 1249.99,
+        "payment_method": "paypal",
+        "deployment_version": "v3.5.0"
+      }
+    },
+    {
+      "trace_id": "trace-89240-payment-txn",
+      "service": "payment-api",
+      "operation": "processPayment",
+      "start_time": "2026-02-09T14:23:24.123Z",
+      "duration_ms": 30045,
+      "status": "ERROR",
+      "error_message": "Connection pool exhausted - all connections leaked",
+      "spans": [
+        {
+          "span_id": "span-1",
+          "operation": "validatePaymentRequest",
+          "duration_ms": 8,
+          "status": "OK"
+        },
+        {
+          "span_id": "span-2",
+          "operation": "checkFraudDetection",
+          "duration_ms": 30000,
+          "status": "ERROR",
+          "error_message": "Database connection timeout",
+          "tags": {
+            "db.driver_version": "2.5.0",
+            "db.connection_leak_detected": true,
+            "db.leaked_connections_count": 156,
+            "db.connection_pool.active": 500,
+            "db.connection_pool.max": 500,
+            "db.connection_pool.waiting_requests": 456,
+            "fraud_detection.query_executed": false,
+            "fraud_detection.connection_closed": false
+          }
+        }
+      ],
+      "metadata": {
+        "user_id": "USR-89012",
+        "transaction_amount": 599.99,
+        "payment_method": "credit_card",
+        "deployment_version": "v3.5.0",
+        "flash_sale_active": true
+      }
+    },
+    {
+      "trace_id": "trace-memory-leak",
+      "service": "payment-api",
+      "operation": "FraudDetectionService.checkFraud",
+      "start_time": "2026-02-09T14:23:20.123Z",
+      "duration_ms": 30000,
+      "status": "ERROR",
+      "error_message": "OutOfMemoryError: Java heap space",
+      "spans": [
+        {
+          "span_id": "span-1",
+          "operation": "openDatabaseConnection",
+          "duration_ms": 45,
+          "status": "OK",
+          "tags": {
+            "connection_obtained": true,
+            "connection_id": "conn-7823"
+          }
+        },
+        {
+          "span_id": "span-2",
+          "operation": "executeQuery",
+          "duration_ms": 29800,
+          "status": "TIMEOUT",
+          "tags": {
+            "query": "SELECT risk_score FROM fraud_patterns WHERE user_id=?",
+            "resultset_opened": true,
+            "resultset_closed": false,
+            "prepared_statement_closed": false,
+            "connection_returned_to_pool": false
+          }
+        },
+        {
+          "span_id": "span-3",
+          "operation": "closeResources",
+          "duration_ms": 0,
+          "status": "NOT_EXECUTED",
+          "error_message": "Timeout occurred before cleanup - RESOURCE LEAK",
+          "tags": {
+            "connection_leaked": true,
+            "resultset_leaked": true,
+            "prepared_statement_leaked": true
+          }
+        }
+      ],
+      "metadata": {
+        "heap_used_mb": 7823,
+        "heap_max_mb": 8192,
+        "gc_overhead_percent": 89.5,
+        "bug_location": "FraudDetectionService.java:145",
+        "root_cause": "Database resources not closed in finally block"
+      }
+    },
+    {
+      "trace_id": "trace-connection-leak-pattern",
+      "service": "payment-api",
+      "operation": "analyzeConnectionLeakPattern",
+      "start_time": "2026-02-09T14:23:27.456Z",
+      "duration_ms": 1000,
+      "status": "ANALYSIS",
+      "analysis": {
+        "pattern_detected": "Database connection leak in FraudDetectionService",
+        "affected_method": "checkFraud()",
+        "leak_rate": "47 connections per minute",
+        "resultset_objects_not_closed": 2347,
+        "prepared_statements_not_closed": 1823,
+        "connections_not_returned": 500,
+        "time_to_full_pool_exhaustion": "10.6 minutes",
+        "introduced_in_version": "v3.5.0",
+        "code_change": "New fraud detection feature added without proper resource cleanup"
+      }
+    }
+  ],
+  "summary": {
+    "total_traces": 5,
+    "error_rate": 100.0,
+    "average_duration_ms": 24287,
+    "connection_leaks_detected": 500,
+    "memory_leak_confirmed": true,
+    "root_cause": "FraudDetectionService in v3.5.0 not closing database connections, ResultSets, and PreparedStatements in finally block",
+    "recommendation": "Immediate rollback to v3.4.9 required"
+  }
+}

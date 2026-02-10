@@ -106,7 +106,7 @@ class ReasoningEngine:
     
     def _parse_rca_response(self, response: str) -> Dict[str, Any]:
         """
-        Parse Gemini's response into structured data.
+        Parse Gemini's response into structured data with robust error handling.
         
         Args:
             response: Raw response from Gemini
@@ -115,19 +115,76 @@ class ReasoningEngine:
             Parsed RCA data
             
         Raises:
-            json.JSONDecodeError: If response is not valid JSON
+            json.JSONDecodeError: If response is not valid JSON and cannot be repaired
         """
+        original_response = response
+        
         # Extract JSON from markdown code blocks if present
         if "```json" in response:
             start = response.find("```json") + 7
             end = response.find("```", start)
-            response = response[start:end].strip()
+            if end == -1:
+                # No closing ```, take rest of string
+                response = response[start:].strip()
+            else:
+                response = response[start:end].strip()
         elif "```" in response:
             start = response.find("```") + 3
             end = response.find("```", start)
-            response = response[start:end].strip()
+            if end == -1:
+                response = response[start:].strip()
+            else:
+                response = response[start:end].strip()
         
-        return json.loads(response)
+        # Try to parse
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Initial JSON parse failed: {e}. Attempting repair...")
+            
+            # Try to fix common JSON issues
+            # 1. Unterminated strings - find last complete valid JSON object
+            try:
+                # Find the last complete object/array
+                depth = 0
+                in_string = False
+                escape_next = False
+                last_valid_pos = 0
+                
+                for i, char in enumerate(response):
+                    if escape_next:
+                        escape_next = False
+                        continue
+                    
+                    if char == '\\':
+                        escape_next = True
+                        continue
+                    
+                    if char == '"' and not escape_next:
+                        in_string = not in_string
+                    
+                    if not in_string:
+                        if char in '{[':
+                            depth += 1
+                        elif char in '}]':
+                            depth -= 1
+                            if depth == 0:
+                                last_valid_pos = i + 1
+                
+                if last_valid_pos > 0:
+                    truncated = response[:last_valid_pos]
+                    logger.info(f"Attempting parse with truncated JSON (up to char {last_valid_pos})")
+                    return json.loads(truncated)
+            except:
+                pass
+            
+            # If repair failed, re-raise original error with context
+            logger.error(f"Failed to parse or repair JSON. First 500 chars: {original_response[:500]}")
+            raise json.JSONDecodeError(
+                f"Invalid JSON from Gemini. Original error: {str(e)}",
+                response,
+                0
+            )
     
     async def _validate_rca(self, rca_data: Dict[str, Any], context_string: str) -> Dict[str, Any]:
         """
@@ -171,6 +228,22 @@ class ReasoningEngine:
         Returns:
             RootCauseAnalysis model
         """
+        # Helper function to sanitize timestamp
+        def sanitize_timestamp(ts):
+            """Convert timestamp to datetime or None, handling invalid values."""
+            if ts is None or ts == 'N/A' or ts == '':
+                return None
+            if isinstance(ts, str):
+                # Try to parse string timestamps
+                try:
+                    from dateutil import parser as date_parser
+                    return date_parser.parse(ts)
+                except:
+                    return None
+            if isinstance(ts, datetime):
+                return ts
+            return None
+        
         # Parse reasoning steps
         reasoning_steps = []
         for idx, step in enumerate(rca_data.get('reasoning_steps', [])):
@@ -184,7 +257,10 @@ class ReasoningEngine:
                         timestamp=None
                     ))
                 elif isinstance(ev, dict):
-                    evidence_list.append(Evidence(**ev))
+                    # Sanitize timestamp before creating Evidence
+                    ev_copy = ev.copy()
+                    ev_copy['timestamp'] = sanitize_timestamp(ev.get('timestamp'))
+                    evidence_list.append(Evidence(**ev_copy))
                 else:
                     evidence_list.append(ev)
             
@@ -206,7 +282,7 @@ class ReasoningEngine:
             
             causal_chain.append(CausalLink(
                 event=event,
-                timestamp=link.get('timestamp'),
+                timestamp=sanitize_timestamp(link.get('timestamp')),
                 service=link.get('service'),
                 is_root_cause=link.get('is_root_cause', False),
                 is_symptom=link.get('is_symptom', False),
@@ -220,7 +296,7 @@ class ReasoningEngine:
                 source=ev.get('source') or ev.get('type', 'log'),
                 description=ev.get('description') or ev.get('content', ''),
                 reference=ev.get('reference'),
-                timestamp=ev.get('timestamp')
+                timestamp=sanitize_timestamp(ev.get('timestamp'))
             ))
         
         # Parse fix suggestions

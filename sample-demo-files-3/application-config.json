@@ -1,0 +1,117 @@
+{
+  "application": "payment-api",
+  "version": "3.5.0",
+  "deployment_date": "2026-02-09T14:15:00Z",
+  "environment": "production",
+  
+  "database": {
+    "host": "payment-db-prod.cluster-abc123.us-east-1.rds.amazonaws.com",
+    "port": 5432,
+    "database": "payments",
+    "driver_version": "postgresql-driver-2.5.0",
+    "connection_pool": {
+      "min_connections": 50,
+      "max_connections": 500,
+      "connection_timeout_ms": 30000,
+      "idle_timeout_ms": 600000,
+      "max_lifetime_ms": 1800000,
+      "leak_detection_threshold_ms": 60000,
+      "validation_timeout_ms": 5000
+    }
+  },
+  
+  "fraud_detection": {
+    "enabled": true,
+    "service_class": "com.company.payment.fraud.FraudDetectionService",
+    "risk_threshold": 0.75,
+    "query_timeout_ms": 30000,
+    "cache_enabled": false,
+    "batch_processing": false,
+    "async_mode": false
+  },
+  
+  "features": {
+    "real_time_fraud_detection": {
+      "enabled": true,
+      "added_in_version": "3.5.0",
+      "description": "Real-time fraud pattern matching against historical data",
+      "risk_level": "HIGH - Not properly tested under load"
+    },
+    "connection_pooling_optimization": {
+      "enabled": true,
+      "added_in_version": "3.5.0",
+      "description": "Upgraded database driver for better connection management",
+      "actual_impact": "NEGATIVE - New driver has different resource cleanup requirements"
+    }
+  },
+  
+  "jvm_settings": {
+    "heap_max": "8G",
+    "heap_min": "4G",
+    "gc_algorithm": "G1GC",
+    "max_gc_pause_ms": 200
+  },
+  
+  "kubernetes": {
+    "namespace": "payment-system",
+    "replicas": 8,
+    "resources": {
+      "requests": {
+        "memory": "4Gi",
+        "cpu": "2000m"
+      },
+      "limits": {
+        "memory": "8Gi",
+        "cpu": "4000m"
+      }
+    },
+    "health_check": {
+      "liveness_probe": "/health/live",
+      "readiness_probe": "/health/ready",
+      "failure_threshold": 3,
+      "period_seconds": 10
+    }
+  },
+  
+  "monitoring": {
+    "metrics_enabled": true,
+    "tracing_enabled": true,
+    "logging_level": "INFO",
+    "alerts": {
+      "error_rate_threshold": 5.0,
+      "response_time_p99_threshold": 1000,
+      "connection_pool_usage_threshold": 90.0,
+      "memory_usage_threshold": 85.0
+    }
+  },
+  
+  "recent_changes": {
+    "v3.5.0_changes": [
+      {
+        "change": "Added FraudDetectionService with real-time pattern matching",
+        "file": "src/main/java/com/company/payment/fraud/FraudDetectionService.java",
+        "bug": "Database connections, ResultSets, and PreparedStatements not closed in finally block",
+        "impact": "CRITICAL - Resource leak causing connection pool exhaustion"
+      },
+      {
+        "change": "Upgraded database driver from v2.1.3 to v2.5.0",
+        "reason": "Better connection pooling and performance",
+        "actual_result": "New driver requires explicit resource cleanup, old code pattern insufficient",
+        "impact": "CRITICAL - Exacerbates connection leak issue"
+      },
+      {
+        "change": "Removed connection pool monitoring alerts during deployment",
+        "reason": "Reduced noise during deployment",
+        "actual_result": "Delayed incident detection by 5 minutes",
+        "impact": "HIGH - Increased blast radius"
+      }
+    ]
+  },
+  
+  "rollback_config": {
+    "previous_stable_version": "v3.4.9",
+    "rollback_estimated_time": "3 minutes",
+    "data_migration_required": false,
+    "rollback_safe": true
+  }
+}
