@@ -121,34 +121,42 @@ async def analyze_incident(request: AnalyzeIncidentRequest):
         
         logger.info(f"Context created: {len(context.logs)} logs, {len(context.metrics)} metrics, {len(context.traces)} traces")
         
-        # 🎬 DEMO MODE: Always use hardcoded response for video demo
-        logger.warning("🎬 DEMO MODE ACTIVE: Using hardcoded payment system RCA for demo video")
+        # Use Gemini AI for real-time analysis
+        logger.info("Sending to Gemini AI for reasoning...")
+        reasoning_engine = ReasoningEngine()
         
-        demo_rca = _generate_demo_rca(context, incident_id)
+        rca = await reasoning_engine.analyze_incident(
+            context=context,
+            focus_area=request.focus_area
+        )
         
         incidents_db[incident_id]["status"] = IncidentStatus.COMPLETED
-        incidents_db[incident_id]["rca"] = demo_rca.model_dump()
+        incidents_db[incident_id]["rca"] = rca.model_dump()
         incidents_db[incident_id]["completed_at"] = datetime.now()
-        incidents_db[incident_id]["demo_mode"] = True
         
-        logger.info(f"✅ Demo analysis completed for incident {incident_id}")
+        logger.info(f"✅ Analysis completed for incident {incident_id}")
+        
+        # Generate executive summary if requested
+        summary = None
+        if request.include_summary:
+            summary = rca.summary
         
         return AnalyzeIncidentResponse(
             incident_id=incident_id,
             status=IncidentStatus.COMPLETED,
-            rca=demo_rca,
-            summary=None
+            rca=rca,
+            summary=summary
         )
         
     except GeminiAPIError as e:
         logger.error(f"Gemini API error: {e}")
         
-        # Check if it's a rate limit error - use DEMO MODE
+        # Check if it's a rate limit error - use fallback demo mode
         error_str = str(e).lower()
         if '429' in error_str or 'resource_exhausted' in error_str or 'rate limit' in error_str:
-            logger.warning("⚠️  Gemini API rate limit - Activating DEMO MODE with mock analysis")
+            logger.warning("⚠️  Gemini API rate limit - Activating FALLBACK DEMO MODE")
             
-            # Generate realistic demo response based on the incident data
+            # Generate demo response as fallback
             demo_rca = _generate_demo_rca(context, incident_id)
             
             incidents_db[incident_id]["status"] = IncidentStatus.COMPLETED
@@ -156,13 +164,13 @@ async def analyze_incident(request: AnalyzeIncidentRequest):
             incidents_db[incident_id]["completed_at"] = datetime.now()
             incidents_db[incident_id]["demo_mode"] = True
             
-            logger.info(f"✅ Demo analysis completed for incident {incident_id}")
+            logger.info(f"✅ Fallback demo analysis provided for incident {incident_id}")
             
             return AnalyzeIncidentResponse(
                 incident_id=incident_id,
                 status=IncidentStatus.COMPLETED,
                 rca=demo_rca,
-                summary="⚠️ DEMO MODE: This analysis uses pre-configured demo data due to API rate limits. The system would normally provide real-time AI analysis."
+                summary="⚠️ FALLBACK MODE: This analysis uses demo data due to API rate limits. Please try again in a few moments for real-time AI analysis."
             )
         else:
             incidents_db[incident_id]["status"] = IncidentStatus.FAILED
